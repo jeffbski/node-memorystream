@@ -4,68 +4,68 @@
 /**
    Adaptation of node-memorystream that will run in browser and server with AMD.
    Allows easy piping, pause, resume.
-   Requires a browser/server compatible version of Stream
+   Based on https://github.com/JSBizon/node-memorystream
 */
 
 define(["stream"], function (Stream) {
 
   function MemoryStream(data, options) {
-    
+
     Stream.call(this);
     var self = this;
-    
+
     this.queue = [];
-    
+
     if (data) {
       if (!Array.isArray(data)) {
         data = [data];
       }
-      
+
       data.forEach(function (chunk) {
         if (! (chunk instanceof Buffer)) {
           chunk = new Buffer(chunk);
         }
-	
+
         self.queue.push(chunk);
       });
     }
-    
+
     this.paused = false;
     this.reachmaxbuf = false;
-    
+
     options = options || {};
-    
+
     this.readableVal = options.hasOwnProperty('readable') ? options.readable : true;
-    
+
     this.__defineGetter__("readable", function () {
       return self.readableVal;
     });
-    
+
     this.__defineSetter__("readable", function (val) {
       self.readableVal = val;
       if (val) {
         self._next();
       }
     });
-    
+
     this.writable = options.hasOwnProperty('writable') ? options.writable : true;
     this.maxbufsize = options.hasOwnProperty('maxbufsize') ? options.maxbufsize : null;
     this.bufoverflow = options.hasOwnProperty('bufoveflow') ? options.bufoveflow : null;
     this.frequence = options.hasOwnProperty('frequence') ? options.frequence : null;
-    
+
     process.nextTick(function () {
       self._next();
     });
   }
-  module.exports = MemoryStream;
 
-  util.inherits(MemoryStream, stream.Stream);
+  MemoryStream.prototype = new Stream();
+  MemoryStream.prototype.constructor = MemoryStream;
 
   MemoryStream.createReadStream = function (data, options) {
     options = options || {};
     options.readable = true;
     options.writable = false;
-    
+
     return new MemoryStream(data, options);
   };
 
@@ -73,7 +73,7 @@ define(["stream"], function (Stream) {
     options = options || {};
     options.readable = false;
     options.writable = true;
-    
+
     return new MemoryStream(data, options);
   };
 
@@ -120,22 +120,22 @@ define(["stream"], function (Stream) {
 
 
   MemoryStream.prototype.pause = function () {
-    if (this.readable) {	
+    if (this.readable) {
       this.paused = true;
     }
   };
-  
+
   MemoryStream.prototype.resume = function () {
-    if (this.readable) {	
+    if (this.readable) {
       this.paused = false;
       this._next();
     }
   };
-  
+
   MemoryStream.prototype.end = function (chunk, encoding) {
     if (typeof chunk !== 'undefined') {
       this.write(chunk, encoding);
-    }	
+    }
     this.writable = false;
     if (this.queue.length === 0) {
       this.readable = false;
@@ -173,12 +173,12 @@ define(["stream"], function (Stream) {
     if (! this.paused && this.readable && this.queue.length > 0) {
       var data = this.queue.shift();
       var cb;
-      
+
       if (Array.isArray(data)) {
         cb = data[1];
         data = data[0];
       }
-      
+
       if (this._decoder) {
         var string = this._decoder.write(data);
         if (string.length) {
@@ -187,42 +187,42 @@ define(["stream"], function (Stream) {
       } else {
         this.emit('data', data);
       }
-      
+
       if (cb) {
         cb(null);
       }
-      
+
       if (this.reachmaxbuf && this.maxbufsize >= this._getQueueSize()) {
         this.reachmaxbuf = false;
         this.emit('drain');
       }
-      
+
       return true;
     }
-    
+
     if (!this.writable && !this.queue.length) {
       this._emitEnd();
     }
-    
+
     return false;
   };
-  
+
   MemoryStream.prototype.write = function (chunk, encoding, callback) {
-    
+
     if (! this.writable) {
       throw new Error('The memory stream is no longer writable.');
     }
-    
+
     if (typeof encoding === 'function') {
       callback = encoding;
       encoding = undefined;
     }
-    
+
     if (! (chunk instanceof Buffer)) {
-      
+
       chunk = new Buffer(chunk, encoding);
     }
-    
+
     var queuesize = chunk.length;
     if (this.maxbufsize || this.bufoverflow) {
       queuesize += this._getQueueSize();
@@ -231,29 +231,29 @@ define(["stream"], function (Stream) {
         return;
       }
     }
-    
+
     if (typeof callback === 'function') {
       this.queue.push([chunk, callback]);
     } else {
       this.queue.push(chunk);
     }
-    
+
     this._next();
-    
+
     if (this.maxbufsize && queuesize > this.maxbufsize) {
       this.reachmaxbuf = true;
       return false;
     }
-    
+
     return true;
   };
 
   MemoryStream.prototype.destroy = function () {
-    
+
     this.end();
-    
+
     this.queue = [];
-    
+
     this.readable = false;
     this.writable = false;
   };
@@ -261,15 +261,15 @@ define(["stream"], function (Stream) {
 
   MemoryStream.prototype.destroySoon = function () {
     this.writable = false;
-    
+
     this._destroy = true;
-    
+
     if (! this.readable || this.queue.length === 0) {
       this.destroy();
     }
-    
+
   };
 
   return MemoryStream;
-  
+
 });
