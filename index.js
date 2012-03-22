@@ -1,13 +1,23 @@
 'use strict';
-/*global define:true */
+/*global define:true Buffer:false */
 
 /**
    Adaptation of node-memorystream that will run in browser and server with AMD.
    Allows easy piping, pause, resume.
+   Requires a browser/server compatible version of Stream
    Based on https://github.com/JSBizon/node-memorystream
 */
 
 define(["stream"], function (Stream) {
+
+  /**
+     check for Buffer, exists on server but not browser.
+     If not available, then setEncoding is meaningless
+     and we won't wrap data in Buffer
+    */
+  function hasBuffer() {
+    return (typeof(Buffer) !== 'undefined');
+  }
 
   function MemoryStream(data, options) {
 
@@ -22,8 +32,10 @@ define(["stream"], function (Stream) {
       }
 
       data.forEach(function (chunk) {
-        if (! (chunk instanceof Buffer)) {
-          chunk = new Buffer(chunk);
+        if (hasBuffer()) { // can only do if we have Buffer
+          if (! (chunk instanceof Buffer)) {
+            chunk = new Buffer(chunk);
+          }
         }
 
         self.queue.push(chunk);
@@ -114,8 +126,10 @@ define(["stream"], function (Stream) {
   };
 
   MemoryStream.prototype.setEncoding = function (encoding) {
-    var StringDecoder = require('string_decoder').StringDecoder;
-    this._decoder = new StringDecoder(encoding);
+    if (hasBuffer()) { // running on server?
+      var StringDecoder = require('string_decoder').StringDecoder;
+      this._decoder = new StringDecoder(encoding);
+    }
   };
 
 
@@ -218,9 +232,10 @@ define(["stream"], function (Stream) {
       encoding = undefined;
     }
 
-    if (! (chunk instanceof Buffer)) {
-
-      chunk = new Buffer(chunk, encoding);
+    if (hasBuffer()) {
+      if (! (chunk instanceof Buffer)) {
+        chunk = new Buffer(chunk, encoding);
+      }
     }
 
     var queuesize = chunk.length;
